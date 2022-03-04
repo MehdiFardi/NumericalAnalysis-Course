@@ -1,0 +1,236 @@
+%%InTheNameOfGod
+
+%%GalerkinMethod
+
+clc
+clear
+close all
+
+%%InputData
+
+E = 70e9;
+height =0.1 ;
+width = 0.2;
+A = height * width;
+L = 2; %[legth]
+area = height*width;
+areaInetia = 1/12*width*height^3 ;
+numberOfShapeFunction = 3;
+a = 8;
+b = 0;
+deltaX = 0.2;
+
+syms x
+%%Load
+
+q = 1e4*a*(x/L)^b;
+
+
+%%ShapeFunction
+
+matrixOfShapeFunction = sym('shapeFunction',[1 numberOfShapeFunction]);
+%matrixOfShapeFunction(1) = x^5*(L - x)^5;
+matrixOfShapeFunction(1) = sin(pi*x/L);
+sum = 11;
+k = 2;
+
+% while 1
+%   for j = 6:sum - 5
+%       matrixOfShapeFunction(k) = x^j*(L - x)^(sum - j);
+%       if k == numberOfShapeFunction
+%           flag = 1;
+%           break;
+%       end
+%       k = k + 1;
+%   end
+%   if flag == 1
+%       break
+%   end
+%   sum  = sum + 1;
+% end
+
+for counter = 2:numberOfShapeFunction
+    matrixOfShapeFunction(counter) = sin(counter*pi*x/L);
+end
+
+matrixOfCoefficient = sym('c',[1 numberOfShapeFunction]);
+answer = matrixOfCoefficient .* matrixOfShapeFunction;
+syms answerFunction
+answerFunction = answer(1);
+
+for m = 2:numberOfShapeFunction
+answerFunction = answerFunction + answer(m);
+end
+
+%%Residual
+
+residual = E*areaInetia*diff(answerFunction,x,4)-3/2*E*A*(diff(answerFunction,x))^2*diff(answerFunction,x,2) + q;
+
+%%SetOfEquations
+
+matrixOfEquations = sym('equation',[1 numberOfShapeFunction]);
+for r = 1: numberOfShapeFunction
+    matrixOfEquations(r) = int(matrixOfShapeFunction(r)*residual,0,L);
+end
+
+%%SolvingSetOfEquation
+
+functionOfEqations = @(t) double(subs(matrixOfEquations',matrixOfCoefficient,t));
+answerOfCoefficient = fsolve(functionOfEqations,zeros(1,numberOfShapeFunction));
+answerFunction = subs(answerFunction,matrixOfCoefficient,answerOfCoefficient);
+
+
+%%Calculation
+
+
+xDomain = 0:0.01:L;
+yDomain = zeros(1,numel(xDomain));
+
+for n = 1:numel(xDomain)
+    
+    yDomain(n) = subs(answerFunction,x,xDomain(n))*1e3;
+    
+end
+
+
+
+
+%%GDQ
+%%Discritization
+
+length = 0:deltaX:L;
+
+%%CalculationOfWeightFunction
+%%FirstDerivative
+
+firstDerivativeWeightMatrix = zeros(numel(length));
+
+for s=1:numel(length)
+    for t=1:numel(length)
+        if s==t
+            continue
+        end
+        firstDerivativeWeightMatrix(s,t) = M(length,s)/(M(length,t) * (length(s) - length(t)));
+    end
+end
+
+sumOfTheRows = zeros(numel(length),1);
+
+for s=1:numel(length)
+    for t=1:numel(length)
+    sumOfTheRows(s) = sumOfTheRows(s) + firstDerivativeWeightMatrix(s,t);
+    end
+    firstDerivativeWeightMatrix(s,s) = -sumOfTheRows(s);
+end
+
+%%SecondDerivative
+secondDerivativeWeightMatrix = zeros(numel(length));
+for s=1:numel(length)
+    for t=1:numel(length)
+        if s==t
+            continue
+        end
+       secondDerivativeWeightMatrix(s,t) = 2*(firstDerivativeWeightMatrix(s,t)*firstDerivativeWeightMatrix(s,s) -...
+           firstDerivativeWeightMatrix(s,t)/(length(s) - length(t)));
+    end
+end
+
+sumOfTheRows = zeros(numel(length),1);
+
+for s=1:numel(length)
+    for t=1:numel(length)
+    sumOfTheRows(s) = sumOfTheRows(s) + secondDerivativeWeightMatrix(s,t);
+    end
+    secondDerivativeWeightMatrix(s,s) = -sumOfTheRows(s);
+end
+
+%%ThirdDerivative
+thirdDerivativeWeightMatrix = zeros(numel(length));
+for s=1:numel(length)
+    for t=1:numel(length)
+        if s==t
+            continue
+        end
+       thirdDerivativeWeightMatrix(s,t) = 3*(firstDerivativeWeightMatrix(s,t)*secondDerivativeWeightMatrix(s,s) -...
+           secondDerivativeWeightMatrix(s,t)/(length(s) - length(t)));
+    end
+end
+
+sumOfTheRows = zeros(numel(length),1);
+
+for s=1:numel(length)
+    for t=1:numel(length)
+    sumOfTheRows(s) = sumOfTheRows(s) + thirdDerivativeWeightMatrix(s,t);
+    end
+    thirdDerivativeWeightMatrix(s,s) = -sumOfTheRows(s);
+end
+
+
+%%FourthDerivative
+fourthDerivativeWeightMatrix = zeros(numel(length));
+for s=1:numel(length)
+    for t=1:numel(length)
+        if s==t
+            continue
+        end
+       fourthDerivativeWeightMatrix(s,t) = 4*(firstDerivativeWeightMatrix(s,t)*thirdDerivativeWeightMatrix(s,s) -...
+           thirdDerivativeWeightMatrix(s,t)/(length(s) - length(t)));
+    end
+end
+
+sumOfTheRows = zeros(numel(length),1);
+
+for s=1:numel(length)
+    for t=1:numel(length)
+    sumOfTheRows(s) = sumOfTheRows(s) + fourthDerivativeWeightMatrix(s,t);
+    end
+    fourthDerivativeWeightMatrix(s,s) = -sumOfTheRows(s);
+end
+
+%%Equations
+
+deflection = sym('y',[1 numel(length)]);
+
+%%BounderyCondition
+matrixOfIdentity = sym('identity',[1 numel(length)-2]);
+matrixOfIdentity(1) = secondDerivativeWeightMatrix(1,:)*deflection';
+matrixOfIdentity(2) = secondDerivativeWeightMatrix(end,:)*deflection';
+
+%%DeflectionEquation
+for z = 3:numel(length)-2
+matrixOfIdentity(z) = E*areaInetia*fourthDerivativeWeightMatrix(z,:)*deflection'...
+-3/2*E*A*(firstDerivativeWeightMatrix(z,:)*deflection')^2*(secondDerivativeWeightMatrix(z,:)*deflection') + q;
+end
+matrixOfIdentity = matrixOfIdentity';
+
+%%BounderyCondition
+matrixOfIdentity = subs(matrixOfIdentity,[deflection(1),deflection(end)],[0,0]);
+valueOfDeflectionFunction = @(y) double(subs(matrixOfIdentity,deflection(2:end-1),y));
+valueOfDeflection = fsolve(valueOfDeflectionFunction,zeros(1,numel(length)-2))*1e3;
+
+%%Visulazation
+min = min(yDomain) + 0.15*min(yDomain);
+max = max(yDomain) + 2;
+figure;
+plot(xDomain,yDomain,'color','r');
+hold on
+plot(length,[0 valueOfDeflection 0],'color','b');
+axis([0,L,min,max]);
+grid on
+legend('Galerkin Method','GDQ Method');
+title('deflection of the beam');
+xlabel('length of the beam (m)');
+ylabel('deflection value of the beam (mm)');
+
+
+
+function sum = M(length,node)
+b = length(node) * ones(1,numel(length)) - length;
+sum = 1;
+for i = 1:numel(length)
+    if b(i) == 0
+        continue
+    end
+    sum = sum *b(i);
+end
+end
