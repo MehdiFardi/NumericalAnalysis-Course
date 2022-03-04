@@ -1,0 +1,192 @@
+
+%%InTheNameOfGOD
+
+clc
+clear
+close all
+
+%%Input data
+mo = 2;
+ro = 1;
+kapa = -1;%[1/bar]
+g = 1;
+beta = 1;%[1/C]
+gama = 1;%[N/m^3]
+T_1 = 300;
+T_2 = 400;
+T0 = 300;
+yDomain =2;
+dy = 0.01;
+
+%%Boundry condition
+
+ nStart = 0;
+ nEnd = 0;
+ uStart = 0;
+ uEnd = 0;
+ TStart = T_1;
+ TEnd = T_2;
+ 
+ %%Increments
+ 
+ nodeNumber = yDomain/dy +1;
+ y=0:dy:yDomain;
+ 
+ %%Preallocation
+ %%answerMatrix=[u2;u1;n2;n1;T1;T2];
+ 
+ answerMatrix = zeros(6,nodeNumber);  
+ 
+ 
+ %%DefiningDifferentialEquation
+ %%Ydot  = AY + SourceTerm
+ 
+ A =[0 0 -kapa/(mo + kapa) 0 0 -ro * g * beta / (mo + kapa);
+     1 0 0 0 0 0;
+     kapa/gama 0 0 2*kapa/gama 0 0;
+     0 0 1 0 0 0;
+     0 0 0 0 0 0;
+     0 0 0 0 1 0];
+ sourceTerm =[ro*g*beta*T0/(mo + kapa);
+     0;
+     0;
+     0;
+     0;
+     0];
+
+ 
+ %%AdjointDifferentialEquation
+ %%Xdot = -Traspos(A)X
+ 
+ syms t firstAdjointEqation secondAdjointEqation thirdAdjointEqation
+minusATraspos = -A';
+a = ['Dx1 = ',signFunction(1,2,minusATraspos),'*x2',signFunction(1,3,minusATraspos),'*x3'];
+b = 'Dx2 = 0';
+c = ['Dx3 = ',signFunction(3,1,minusATraspos),'*x1',signFunction(3,4,minusATraspos),'*x4'];
+d = ['Dx4 = ',signFunction(4,3,minusATraspos),'*x3'];
+e = ['Dx5 = ',signFunction(5,6,minusATraspos),'*x6'];
+ f = ['Dx6 = ',signFunction(6,1,minusATraspos),'*x1'];
+ 
+ %%BounderyCondition
+ 
+ Bounderyset1_1 = ['x1 (',num2str(yDomain),')=0'];
+ Bounderyset1_2 = ['x2 (',num2str(yDomain),')=1'];
+ Bounderyset1_3 = ['x3 (',num2str(yDomain),')=0'];
+ Bounderyset1_4 = ['x4 (',num2str(yDomain),')=0'];
+ Bounderyset1_5 = ['x5 (',num2str(yDomain),')=0'];
+ Bounderyset1_6 = ['x6 (',num2str(yDomain),')=0'];
+ 
+ Bounderyset2_1 = ['x1 (',num2str(yDomain),')=0'];
+ Bounderyset2_2 = ['x2 (',num2str(yDomain),')=0'];
+ Bounderyset2_3 = ['x3 (',num2str(yDomain),')=0'];
+ Bounderyset2_4 = ['x4 (',num2str(yDomain),')=1'];
+ Bounderyset2_5 = ['x5 (',num2str(yDomain),')=0'];
+ Bounderyset2_6 = ['x6 (',num2str(yDomain),')=0'];
+ 
+ Bounderyset3_1 = ['x1 (',num2str(yDomain),')=0'];
+ Bounderyset3_2 = ['x2 (',num2str(yDomain),')=0'];
+ Bounderyset3_3 = ['x3 (',num2str(yDomain),')=0'];
+ Bounderyset3_4 = ['x4 (',num2str(yDomain),')=0'];
+ Bounderyset3_5 = ['x5 (',num2str(yDomain),')=0'];
+ Bounderyset3_6 = ['x6 (',num2str(yDomain),')=1'];
+ 
+ %%SolvingOFAdjointDifferentialEquation
+ 
+firstAdjointEquation = dsolve(a,b,c,d,e,f,Bounderyset1_1,Bounderyset1_2,Bounderyset1_3,Bounderyset1_4,Bounderyset1_5,Bounderyset1_6);
+
+secondAdjointEquation = dsolve(a,b,c,d,e,f,Bounderyset2_1,Bounderyset2_2,Bounderyset2_3,Bounderyset2_4,Bounderyset2_5,Bounderyset2_6);
+
+thirdAdjointEquation = dsolve(a,b,c,d,e,f,Bounderyset3_1,Bounderyset3_2,Bounderyset3_3,Bounderyset3_4,Bounderyset3_5,Bounderyset3_6);
+
+
+%%FirstSetOfBoundryCondition : [1;0;0;0;0;0]
+matrixOfFirstAdjointEquation = [firstAdjointEquation.x1;firstAdjointEquation.x2;firstAdjointEquation.x3;...
+    firstAdjointEquation.x4;firstAdjointEquation.x5;firstAdjointEquation.x6];
+initialConditionForSet1 = double(subs(matrixOfFirstAdjointEquation,t,0));
+
+%%FirstSetOfBoundryCondition : [0;0;1;0;0;0]
+matrixOfFirstAdjointEquation = [secondAdjointEquation.x1;secondAdjointEquation.x2;secondAdjointEquation.x3;...
+    secondAdjointEquation.x4;secondAdjointEquation.x5;secondAdjointEquation.x6];
+initialConditionForSet2 = double(subs(matrixOfFirstAdjointEquation,t,0));
+
+%%FirstSetOfBoundryCondition : [0;0;0;0;1;0]
+matrixOfFirstAdjointEquation = [thirdAdjointEquation.x1;thirdAdjointEquation.x2;thirdAdjointEquation.x3;...
+    thirdAdjointEquation.x4;thirdAdjointEquation.x5;thirdAdjointEquation.x6];
+initialConditionForSet3 = double(subs(matrixOfFirstAdjointEquation,t,0));
+
+ %%MethodOfAdjoint
+ 
+ RHS = zeros(3,1);
+ RHS(1) = double(uEnd - int(firstAdjointEquation.x1*sourceTerm(1),0,yDomain) -uStart*initialConditionForSet1(2)...
+     -nStart*initialConditionForSet1(4)-TStart*initialConditionForSet1(6));
+
+
+RHS(2) = double(nEnd - int(secondAdjointEquation.x1*sourceTerm(1),0,yDomain) -uStart*initialConditionForSet2(2)...
+     -nStart*initialConditionForSet2(4)-TStart*initialConditionForSet2(6)); 
+  RHS(3) = double(TEnd - int(thirdAdjointEquation.x1*sourceTerm(1),0,yDomain) -uStart*initialConditionForSet3(2)...
+     -nStart*initialConditionForSet3(4)-TStart*initialConditionForSet3(6));
+ 
+ LHS =double( [initialConditionForSet1(1),initialConditionForSet1(3),initialConditionForSet1(5);
+     initialConditionForSet2(1),initialConditionForSet2(3),initialConditionForSet2(5);
+     initialConditionForSet3(1),initialConditionForSet3(3),initialConditionForSet3(5)]);
+ 
+ missingInitialCondition = LHS \ RHS;
+ 
+ 
+ answerMatrix( : ,1) = [missingInitialCondition(1);uStart;missingInitialCondition(2);nStart;...
+     missingInitialCondition(3);TStart];
+ 
+ %%SecondNodeCalculation
+ %%RangeKutta(SecondOrder)
+ 
+k1 = A*answerMatrix( : ,1) + sourceTerm;
+answerMatrix( : ,2) = answerMatrix( : ,1) + dy*k1;
+k2 = A*answerMatrix( : ,2) + sourceTerm;
+answerMatrix( : ,2) = answerMatrix( : ,1) + dy*(k1 + k2)/2;
+ k2 = A*answerMatrix( : ,2) + sourceTerm;
+ 
+ %%ThirdNodeCalculation(Method of Mr.Haghi)
+ 
+ F = zeros(6,nodeNumber);
+ F(:,1)=k1;
+ F(:,2)=k2;
+ answerMatrix(:,3) = answerMatrix(:,2) + dy/2*(3*F(:,2) - F(:,1));
+ 
+ %%OtherNodesCalculation(Method of Mr.Haghi)
+ 
+ for i =4:nodeNumber
+     F(:,i-1) = A*answerMatrix( : ,i-1) + sourceTerm;
+     answerMatrix(:,i) = answerMatrix(:,i-1) + dy/12*(19*F(:,i-1) - 8*F(:,i-2) + F(:,i-2));
+ end
+ 
+ %%Visualization
+ 
+ subplot(3,1,1);
+ plot(y,answerMatrix(2,:),'b');
+  grid on
+  title('The graph of the solution','color','r');
+  xlabel('Domain of y');
+  ylabel('u');
+ subplot(3,1,2);
+ plot(y,answerMatrix(4,:),'r');
+  grid on
+  xlabel('Domain of y');
+  ylabel('n');
+  subplot(3,1,3);
+ plot(y,answerMatrix(6,:),'g');
+ grid on
+ xlabel('Domain of y');
+ ylabel('T');
+ 
+ 
+ 
+ function c =signFunction(a,b,minusATraspos)
+ 
+ if minusATraspos(a,b) < 0
+     c = [' ',num2str(minusATraspos(a,b))];
+ end
+  if minusATraspos(a,b) >=  0
+      c = [' +',num2str(minusATraspos(a,b))];
+  end
+  
+ end
